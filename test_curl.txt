@@ -1,0 +1,12 @@
+curl -X POST -F "file=@test.txt" http://localhost:3000/upload
+curl -X DELETE http://localhost:3000/delete
+
+siege -b -c50 -t1M -v  http://localhost:3000
+
+curl --resolve localhost:80:127.0.0.1 http://localhost:3000
+
+valgrind --leak-check=full ./webserv config/Default_config.conf
+
+error 505: curl --http1.0 -I http://localhost:3000
+error 413 : curl -X POST -H "Content-Type:plain/text" -
+error 400 : echo -e " / HTTP/1.1\r\nHost: \r\n\r\n" | nc localhost 8080 -data  "salut lili salut lili  salut lili  salut lilt lili salut lili  salut lili  salut lilii t lili salut lili  salut lili  salut lilit lili salut lili  salut lili  salut lilit lili salut lili  salut lili  salut alut lilit lili salut lili  salut lili  salut lilit lili salut lili  salut lili  salut lilialut lilit lili salut lili  salut lili  salut lilit lili salut lili  salut lili  salut lilialut lilit lili salut lili  salut lili  salut lilit lili salut lili  salut lili  salut lilililiilt lili salut lili  salut lili  salut lilii t lili salut lili  salut lili  salut lilit lili salut lili  salut lili  salut lilit lili salut lili  salut lili  salut alut lilit lili salut lili  salut lili  salut lilit lili salut lili  salut lili  salut lilialut lilit lili salut lili  salut lili  salut lilit lili salut lili  salut lili  salut lilialut lilit lili salut lili  salut lili  salut lilit lili salut lili  salut lili  salut lililililt lili salut lili  salut lili  salut   " http://localhost:3000

@@ -1,0 +1,53 @@
+body {
+  font-family: 'Arial', sans-serif;
+  margin: 0;
+  background-color: #f0f0f0;
+}
+
+.header {
+  display: flex !important;
+  justify-content: center !important;
+  align-items: center !important;
+  padding: 20px !important;
+  background-color: #ffffff !important; /* Couleur de fond de l'entête */
+}
+
+.logo {
+  height: 50px; /* Ajuste cette valeur selon la taille souhaitée pour ton logo */
+  margin-right: 20px; /* Espacement entre le logo et le titre */
+}
+
+.container {
+  display: flex;
+  margin-top: 150px !important;
+  flex-direction: column;
+  align-items: center;
+  /*border: 2px solid #007bff;*/
+  padding: 20px;
+  border-radius: 10px;
+  background-color: #f9f9f9; /* Légère différence de couleur pour le fond */
+  box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+  width: 80%;
+  max-width: 600px;
+  margin: auto; /* Centre le conteneur sur la page */
+}
+
+h1, h2 {
+  color: #202020;
+}
+
+a {
+  display: inline-block;
+  margin: 10px;
+  padding: 10px 20px;
+  background-color: #000000;
+  color: white;
+  text-decoration: none;
+  border-radius: 5px;
+  transition: background-color 0.3s;
+}
+
+a:hover {
+  background-color: #000000;
+}
+

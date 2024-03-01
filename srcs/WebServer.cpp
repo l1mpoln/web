@@ -13,6 +13,8 @@
 #include "../includes/WebServer.hpp"
 #include "../includes/ConfigParse.hpp"
 
+const int MAX_BUFFER_SIZE = 1024;
+
 WebServer::WebServer(std::string config_file_name) 
 {
     vector<ServerConfig>::iterator it;
@@ -172,8 +174,86 @@ std::string generateDirectoryListingHTML(const std::string& directoryPath) {
     return html.str();
 }
 
+std::string sendInternalServerError(int clientSocket) {
+    std::string response = "HTTP/1.1 500 Internal Server Error\r\n";
+    response += "Content-Length: 0\r\n";
+    response += "Connection: close\r\n\r\n";
+
+    send(clientSocket, response.c_str(), response.size(), 0);
+
+    return response;
+}
+
+std::string executeCGI(const std::string& scriptPath, const std::string& request, int clientSocket) {
+    int pipefd[2];
+    if (pipe(pipefd) == -1) 
+    {
+        std::cerr << "Error creating pipe: " << strerror(errno) << std::endl;
+        return sendInternalServerError(clientSocket);
+    }
+
+    pid_t pid = fork();
+    if (pid == -1) 
+    {
+        std::cerr << "Error forking process: " << strerror(errno) << std::endl;
+        close(pipefd[0]);
+        close(pipefd[1]);
+        return sendInternalServerError(clientSocket);
+    }
+
+    if (pid == 0) 
+    { // Child process
+        close(pipefd[0]); // Close read end of the pipe
+
+        // Redirect stdout to the pipe
+        dup2(pipefd[1], STDOUT_FILENO);
+
+        // Set up environment variables
+        char* env[] = {NULL};  // You can customize the environment if needed
+
+        // Execute the CGI script with the provided environment
+        execle(scriptPath.c_str(), scriptPath.c_str(), NULL, env);
+
+        // If execle fails
+        std::cerr << "Error executing CGI script: " << strerror(errno) << std::endl;
+        close(pipefd[1]);
+        _exit(EXIT_FAILURE);
+    } 
+    else 
+    { // Parent process
+        close(pipefd[1]); // Close write end of the pipe
+
+        // Read the output from the CGI script
+        char buffer[MAX_BUFFER_SIZE];
+        ssize_t bytesRead = read(pipefd[0], buffer, sizeof(buffer));
+        close(pipefd[0]);
+
+        if (bytesRead == -1) 
+        {
+            std::cerr << "Error reading from pipe: " << strerror(errno) << std::endl;
+            return sendInternalServerError(clientSocket);
+        }
+
+        // Wait for the child process to finish
+        int status;
+        waitpid(pid, &status, 0);
+
+        if (WIFEXITED(status) && WEXITSTATUS(status) == 0) 
+        {
+            // CGI script executed successfully
+            return std::string(buffer, bytesRead);
+        } 
+        else 
+        {
+            std::cerr << "CGI script failed to execute" << std::endl;
+            return sendInternalServerError(clientSocket);
+        }
+    }
+}
+
 string WebServer::handleRequest(int clientSocket, const std::string& request) 
 {
+    std::string scriptName;
     std::istringstream requestStream(request);
     std::string method, path, version;
     vector<string>::iterator it;
@@ -219,7 +299,6 @@ string WebServer::handleRequest(int clientSocket, const std::string& request)
          cout << "DEBUG_00\n";
         return sendBadRequestResponse(clientSocket);
     }
-
     if (path.find(".css") != std::string::npos)
     {
         return sendCssResponse(clientSocket);
@@ -229,7 +308,9 @@ string WebServer::handleRequest(int clientSocket, const std::string& request)
     }
     if (method == "GET") 
     {
-        if (path == "/")
+        if (path == "/cgi-bin/script3.py")
+            return executeCGI("./cgi-bin/script3.py", request, clientSocket);
+        else if (path == "/")
             return sendFileResponse(clientSocket, socketToServerConfigMap[clientSocket]._index);
         else if (path == "/test_curl.txt")
             return sendError403(clientSocket);

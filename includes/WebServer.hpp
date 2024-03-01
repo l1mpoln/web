@@ -13,6 +13,8 @@
 #ifndef WEBSERVER_HPP
 #define WEBSERVER_HPP
 
+#include <sys/types.h>
+#include <sys/wait.h>
 #include "Utils.hpp"
 #include "ConfigParse.hpp"
 #include "ServerConfig.hpp"
@@ -35,6 +37,7 @@ class WebServer
         void start();
 
     private:
+        std::string sendInternalServerError(int clientSocket);
         string handleRequest(int clientSocket, const std::string& request);
         bool isListeningSocket(int fd);
         size_t checkClientMaxBodySize(char *buffer, int bytesRead, size_t i);

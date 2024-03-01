@@ -13,49 +13,85 @@
 #include "../includes/WebServer.hpp"
 #include "../includes/ConfigParse.hpp"
 
-string WebServer::handleFileUpload(int clientSocket, std::istringstream& requestStream) 
+std::string getBoundaryFromContentType(std::istringstream& requestStream) 
 {
-    int contentLength = 0;
+    std::string contentTypeHeader;
+    std::getline(requestStream, contentTypeHeader);
+
+    size_t pos = contentTypeHeader.find("boundary=");
+    if (pos != std::string::npos) {
+        return contentTypeHeader.substr(pos + 9);
+    }
+
+    return "";
+}
+
+std::string readPostData(std::istringstream& requestStream, const std::string& boundary)
+{
+    std::ostringstream postData;
     std::string line;
-    
-    while (std::getline(requestStream, line)) 
-    {
-        if (line == "\r") 
-            break;
-        else if (line.find("Content-Length:") != std::string::npos) 
-            contentLength = atoi(line.substr(line.find(":") + 1).c_str());
+
+    // Пропускаем первую строку
+    std::getline(requestStream, line);
+
+    // Читаем данные, пока не встретим разделитель
+    while (std::getline(requestStream, line) && line.find(boundary) == std::string::npos) {
+        postData << line << "\n";
     }
-    std::cerr << "Content-Length: " << contentLength << std::endl;
-    std::ostringstream fileData;
-    char buffer[1024];
-    int bytesRead = 0;
-    int totalBytesRead = 0;
-    while (totalBytesRead < contentLength) 
-    {
-        bytesRead = recv(clientSocket, buffer, (sizeof(buffer) < (contentLength - totalBytesRead)) ? sizeof(buffer) : (contentLength - totalBytesRead), 0);
-        if (bytesRead <= 0) 
-        {
-            std::cerr << "Error reading file data.\n";
-            std::string response = "HTTP/1.1 500 Internal Server Error\r\n\r\nFailed to read file data.\n";
-            return sendError500(clientSocket);
+    return postData.str();
+}
+
+std::string extractFilename(const std::string& formData) 
+{
+    size_t pos = formData.find("filename=\"");
+    if (pos != std::string::npos) {
+        pos += 10;  // Длина "filename=\""
+        size_t endPos = formData.find("\"", pos);
+        if (endPos != std::string::npos && endPos >= pos && endPos <= formData.size()) {
+            return formData.substr(pos, endPos - pos);
         }
-        totalBytesRead += bytesRead;
-        fileData.write(buffer, bytesRead);
     }
-    if (totalBytesRead == contentLength) 
-    {
-        std::ofstream outputFile("./Upload_File/uploaded_file.txt", std::ios::binary);
-        if (outputFile.is_open()) 
-        {
-            outputFile << fileData.str();
-            outputFile.close();
-            std::cerr << "File uploaded successfully.\n";
-            std::string response = "HTTP/1.1 200 OK\r\n\r\nFile uploaded successfully.\n";
-            return response;
-            //send(clientSocket, response.c_str(), response.size(), 0);
-        } 
-        else 
-            return sendError500(clientSocket);
+
+    return "";
+}
+
+
+std::string extractFileContent(const std::string& formData, const std::string& boundary)
+{
+    size_t pos = formData.find(boundary);
+    if (pos != std::string::npos) {
+        pos += boundary.size();
+        size_t endPos = formData.find(boundary, pos);
+        if (endPos != std::string::npos && endPos >= pos && endPos <= formData.size()) {
+            return formData.substr(pos, endPos - pos);
+        }
     }
-    return 0;
+
+    return "";
+}
+
+void saveFile(const std::string& filename, const std::string& content) 
+{
+    std::ofstream file(filename.c_str(), std::ios::binary);
+    if (file.is_open()) {
+        file << content;
+        file.close();
+    }
+}
+
+std::string WebServer::handleFileUpload(int clientSocket, std::istringstream& requestStream) 
+{
+    std::string boundary = getBoundaryFromContentType(requestStream);
+
+    // Обработка данных, отправленных POST-запросом
+    std::string formData = readPostData(requestStream, boundary);
+
+    // Извлечение файла из формы
+    std::string filename = extractFilename(formData);
+    std::string fileContent = extractFileContent(formData, boundary);
+    // Сохранение файла на сервере
+    saveFile(filename, fileContent);
+
+    // Возвращение ответа клиенту
+    return sendTextResponse(clientSocket, "File uploaded successfully");
 }

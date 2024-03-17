@@ -335,7 +335,10 @@ string WebServer::handleRequest(int clientSocket, const std::string& request)
     else if (method == "POST") 
     {
         if (path == "/upload")
-           return handleFileUpload(clientSocket, requestStream);
+        {
+            std::string uploadResponse = handleFileUpload(clientSocket, requestStream, generateDirectoryListingHTML(path.substr(1)));
+            return sendTextResponse(clientSocket, uploadResponse);
+        }
         else if (path=="/login")
         {
            return handleLogin(clientSocket, requestStream);

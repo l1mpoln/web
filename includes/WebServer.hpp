@@ -37,7 +37,6 @@ class WebServer
         void start();
 
     private:
-        std::string sendInternalServerError(int clientSocket);
         string handleRequest(int clientSocket, const std::string& request);
         bool isListeningSocket(int fd);
         size_t checkClientMaxBodySize(char *buffer, int bytesRead, size_t i);
@@ -51,7 +50,6 @@ class WebServer
         string sendNotFoundResponse(int clientSocket);
         string sendBadRequestResponse(int clientSocket);
         string sendSessionResponse(int clientSocket, const std::string& filename);
-        string handleFileUpload(int clientSocket, std::istringstream& requestStream);
         string sendHttpResponse(int clientSocket, const std::string& htmlContent);
         string handleLogout(int clientSocket);
         string sendError413(int clientSocket);
@@ -103,6 +101,8 @@ class WebServer
 
 };
 
+std::string handleFileUpload(int clientSocket, std::istringstream& requestStream, const std::string& htmlContent);
+std::string sendInternalServerError(int clientSocket);
 void check_port(std::vector<ServerConfig> servers);
 
 #endif

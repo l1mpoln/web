@@ -12,86 +12,66 @@
 
 #include "../includes/WebServer.hpp"
 #include "../includes/ConfigParse.hpp"
+#include <cstdlib>
 
-std::string getBoundaryFromContentType(std::istringstream& requestStream) 
-{
-    std::string contentTypeHeader;
-    std::getline(requestStream, contentTypeHeader);
+std::string handleFileUpload(int clientSocket, std::istringstream& requestStream, const std::string& htmlContent) {
+    size_t contentLength = htmlContent.length();
+    std::string requestBody;
+    std::string requestLine;
 
-    size_t pos = contentTypeHeader.find("boundary=");
-    if (pos != std::string::npos) {
-        return contentTypeHeader.substr(pos + 9);
+    std::cerr << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
+    // Читаем заголовки запроса
+    while (std::getline(requestStream, requestLine) && requestLine != "\r") {
+        std::cerr << requestLine << std::endl;
+    }
+    std::cerr << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
+    // Получение длины тела запроса
+    std::cout << "Content length: ===" << contentLength << std::endl; // Отладочное сообщение
+
+    if (contentLength == 0) {
+        std::cout << "Error: Empty request body" << std::endl; // Отладочное сообщение
+        return "Error: Empty request body";
     }
 
-    return "";
-}
+    // Читаем тело запроса
+    std::getline(requestStream, requestBody, '\0');
 
-std::string readPostData(std::istringstream& requestStream, const std::string& boundary)
-{
-    std::ostringstream postData;
-    std::string line;
-
-    // Пропускаем первую строку
-    std::getline(requestStream, line);
-
-    // Читаем данные, пока не встретим разделитель
-    while (std::getline(requestStream, line) && line.find(boundary) == std::string::npos) {
-        postData << line << "\n";
-    }
-    return postData.str();
-}
-
-std::string extractFilename(const std::string& formData) 
-{
-    size_t pos = formData.find("filename=\"");
-    if (pos != std::string::npos) {
-        pos += 10;  // Длина "filename=\""
-        size_t endPos = formData.find("\"", pos);
-        if (endPos != std::string::npos && endPos >= pos && endPos <= formData.size()) {
-            return formData.substr(pos, endPos - pos);
-        }
+    // Поиск строки, содержащей "filename="
+    size_t filenamePos = requestBody.find("filename=\"");
+    if (filenamePos == std::string::npos) {
+        std::cout << "Error: Filename not found in request" << std::endl;
+        return "Error: Filename not found in request";
     }
 
-    return "";
-}
-
-
-std::string extractFileContent(const std::string& formData, const std::string& boundary)
-{
-    size_t pos = formData.find(boundary);
-    if (pos != std::string::npos) {
-        pos += boundary.size();
-        size_t endPos = formData.find(boundary, pos);
-        if (endPos != std::string::npos && endPos >= pos && endPos <= formData.size()) {
-            return formData.substr(pos, endPos - pos);
-        }
+    // Найдем начало имени файла
+    filenamePos += 10; // Длина "filename=\"" равна 10 символам
+    size_t filenameEnd = requestBody.find("\"", filenamePos);
+    if (filenameEnd == std::string::npos) {
+        std::cout << "Error: Unable to find end of filename" << std::endl;
+        return "Error: Unable to find end of filename";
     }
 
-    return "";
-}
+    // Получим имя файла
+    std::string filename = requestBody.substr(filenamePos, filenameEnd - filenamePos);
 
-void saveFile(const std::string& filename, const std::string& content) 
-{
-    std::ofstream file(filename.c_str(), std::ios::binary);
-    if (file.is_open()) {
-        file << content;
-        file.close();
+    // Получаем начало и конец сегмента данных файла
+    size_t fileDataPos = requestBody.find("\r\n\r\n");
+    if (fileDataPos == std::string::npos) {
+        std::cout << "Error: Unable to find beginning of file data" << std::endl;
+        return "Error: Unable to find beginning of file data";
     }
-}
+    fileDataPos += 4; // Пропускаем "\r\n\r\n"
+    std::string fileData = requestBody.substr(fileDataPos); // Получаем данные файла
 
-std::string WebServer::handleFileUpload(int clientSocket, std::istringstream& requestStream) 
-{
-    std::string boundary = getBoundaryFromContentType(requestStream);
+    // Сохраняем данные в файл
+    std::ofstream outputFile(filename.c_str(), std::ios::binary);
+    if (!outputFile) {
+        std::cout << "Error: Failed to create file" << std::endl;
+        return "Error: Failed to create file";
+    }
+    outputFile << fileData;
+    outputFile.close();
 
-    // Обработка данных, отправленных POST-запросом
-    std::string formData = readPostData(requestStream, boundary);
-
-    // Извлечение файла из формы
-    std::string filename = extractFilename(formData);
-    std::string fileContent = extractFileContent(formData, boundary);
-    // Сохранение файла на сервере
-    saveFile(filename, fileContent);
-
-    // Возвращение ответа клиенту
-    return sendTextResponse(clientSocket, "File uploaded successfully");
+    // Возвращаем сообщение об успешной загрузке файла
+    return "File uploaded successfully";
 }

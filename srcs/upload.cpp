@@ -14,64 +14,64 @@
 #include "../includes/ConfigParse.hpp"
 #include <cstdlib>
 
-std::string handleFileUpload(int clientSocket, std::istringstream& requestStream, const std::string& htmlContent) {
-    size_t contentLength = htmlContent.length();
-    std::string requestBody;
-    std::string requestLine;
-
-    std::cerr << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
-    // Читаем заголовки запроса
-    while (std::getline(requestStream, requestLine) && requestLine != "\r") {
-        std::cerr << requestLine << std::endl;
-    }
-    std::cerr << "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA" << std::endl;
-    // Получение длины тела запроса
-    std::cout << "Content length: ===" << contentLength << std::endl; // Отладочное сообщение
-
-    if (contentLength == 0) {
-        std::cout << "Error: Empty request body" << std::endl; // Отладочное сообщение
-        return "Error: Empty request body";
-    }
-
-    // Читаем тело запроса
-    std::getline(requestStream, requestBody, '\0');
-
-    // Поиск строки, содержащей "filename="
-    size_t filenamePos = requestBody.find("filename=\"");
+std::string getFileNameFromHeader(const std::string& header) {
+    size_t filenamePos = header.find("filename=\"");
     if (filenamePos == std::string::npos) {
-        std::cout << "Error: Filename not found in request" << std::endl;
-        return "Error: Filename not found in request";
+        return ""; // Имя файла не найдено
     }
 
-    // Найдем начало имени файла
     filenamePos += 10; // Длина "filename=\"" равна 10 символам
-    size_t filenameEnd = requestBody.find("\"", filenamePos);
+    size_t filenameEnd = header.find("\"", filenamePos);
     if (filenameEnd == std::string::npos) {
-        std::cout << "Error: Unable to find end of filename" << std::endl;
-        return "Error: Unable to find end of filename";
+        return ""; // Конец имени файла не найден
     }
 
-    // Получим имя файла
-    std::string filename = requestBody.substr(filenamePos, filenameEnd - filenamePos);
+    return header.substr(filenamePos, filenameEnd - filenamePos);
+}
 
-    // Получаем начало и конец сегмента данных файла
-    size_t fileDataPos = requestBody.find("\r\n\r\n");
-    if (fileDataPos == std::string::npos) {
-        std::cout << "Error: Unable to find beginning of file data" << std::endl;
-        return "Error: Unable to find beginning of file data";
+std::string handleFileUpload(int clientSocket, std::istringstream& requestStream, const std::string& htmlContent) {
+    std::string line;
+    std::string requestBody;
+    bool foundContentType = false;
+
+    // Пропускаем заголовки запроса
+    while (std::getline(requestStream, line) && !line.empty()) {
+        if (line.find("Content-Disposition") != std::string::npos) {
+            size_t filenamePos = line.find("filename=\"");
+            if (filenamePos != std::string::npos) {
+                size_t filenameEnd = line.find("\"", filenamePos + 10); // Длина "filename=\"" равна 10 символам
+                if (filenameEnd != std::string::npos) {
+                    std::string filename = line.substr(filenamePos + 10, filenameEnd - (filenamePos + 10));
+                    if (!filename.empty()) {
+                        // Начинаем считывать данные файла
+                        while (std::getline(requestStream, line) && line.find("------WebKitFormBoundary") == std::string::npos) {
+                            if (line.find("Content-Type: text/plain") != std::string::npos) {
+                                foundContentType = true;
+                                continue;
+                            }
+                            if (foundContentType) {
+                                requestBody += line + "\n";
+                            }
+                        }
+                        // Удаляем последний символ новой строки, если он есть
+                        if (!requestBody.empty() && requestBody[requestBody.length() - 1] == '\n') {
+                            requestBody.erase(requestBody.length() - 1);
+                        }
+                        // Сохраняем данные в файл
+                        std::ofstream outputFile(filename.c_str(), std::ios::binary);
+                        if (!outputFile) {
+                            std::cerr << "Error: Failed to create file" << std::endl;
+                            return "Error: Failed to create file";
+                        }
+                        outputFile << requestBody;
+                        outputFile.close();
+                        return "File uploaded successfully";
+                    }
+                }
+            }
+        }
     }
-    fileDataPos += 4; // Пропускаем "\r\n\r\n"
-    std::string fileData = requestBody.substr(fileDataPos); // Получаем данные файла
 
-    // Сохраняем данные в файл
-    std::ofstream outputFile(filename.c_str(), std::ios::binary);
-    if (!outputFile) {
-        std::cout << "Error: Failed to create file" << std::endl;
-        return "Error: Failed to create file";
-    }
-    outputFile << fileData;
-    outputFile.close();
-
-    // Возвращаем сообщение об успешной загрузке файла
-    return "File uploaded successfully";
+    std::cerr << "Error: Content-Disposition header not found in request" << std::endl;
+    return "Error: Content-Disposition header not found in request";
 }

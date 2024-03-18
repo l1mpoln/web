@@ -202,28 +202,23 @@ std::string executeCGI(const std::string& scriptPath, const std::string& request
     }
 
     if (pid == 0) 
-    { // Child process
-        close(pipefd[0]); // Close read end of the pipe
+    { 
+        close(pipefd[0]);
 
-        // Redirect stdout to the pipe
         dup2(pipefd[1], STDOUT_FILENO);
 
-        // Set up environment variables
-        char* env[] = {NULL};  // You can customize the environment if needed
+        char* env[] = {NULL};  
 
-        // Execute the CGI script with the provided environment
         execle(scriptPath.c_str(), scriptPath.c_str(), NULL, env);
 
-        // If execle fails
         std::cerr << "Error executing CGI script: " << strerror(errno) << std::endl;
         close(pipefd[1]);
         _exit(EXIT_FAILURE);
     } 
     else 
-    { // Parent process
-        close(pipefd[1]); // Close write end of the pipe
+    { 
+        close(pipefd[1]); 
 
-        // Read the output from the CGI script
         char buffer[MAX_BUFFER_SIZE];
         ssize_t bytesRead = read(pipefd[0], buffer, sizeof(buffer));
         close(pipefd[0]);
@@ -234,13 +229,11 @@ std::string executeCGI(const std::string& scriptPath, const std::string& request
             return sendInternalServerError(clientSocket);
         }
 
-        // Wait for the child process to finish
         int status;
         waitpid(pid, &status, 0);
 
         if (WIFEXITED(status) && WEXITSTATUS(status) == 0) 
         {
-            // CGI script executed successfully
             return std::string(buffer, bytesRead);
         } 
         else 
@@ -334,12 +327,9 @@ string WebServer::handleRequest(int clientSocket, const std::string& request)
     }
     else if (method == "POST") 
     {
-        if (path == "/upload")
-        {
-            std::string uploadResponse = handleFileUpload(clientSocket, requestStream, generateDirectoryListingHTML(path.substr(1)));
-            return sendTextResponse(clientSocket, uploadResponse);
-        }
-        else if (path=="/login")
+        if (path == "/cgi-bin/upload.py") 
+            return executeCGI("./cgi-bin/upload.py", request, clientSocket);
+        if (path=="/login")
         {
            return handleLogin(clientSocket, requestStream);
         }
